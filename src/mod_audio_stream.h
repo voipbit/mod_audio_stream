@@ -314,7 +314,7 @@ struct voipbit_session_context
     /** @brief Bytes of incoming audio played */
     unsigned int stream_input_played;
 
-    /** @brief Total bytes available for playback */
+    /** @brief Total bytes available for playbook */
     unsigned int total_playable_bytes;
 
     /** @brief Mutex for thread-safe write buffer access */
@@ -370,6 +370,11 @@ extern globals_t globals;
 
 /** @brief Type alias for VoipBit session context structure */
 typedef struct voipbit_session_context voipbit_session_context_t;
+typedef struct voipbit_media_processor_args voipbit_media_processor_args_t;
+
+/** @brief Compatibility aliases for existing code */
+typedef voipbit_session_context_t private_data_t;
+typedef voipbit_media_processor_args_t media_bug_callback_args_t;
 
 /**
  * @brief Media bug type enumeration
@@ -395,7 +400,7 @@ typedef enum media_bug_type
 typedef struct voipbit_media_processor_args
 {
     /** @brief Thread-safe synchronization mutex */
-    switch_mutex_t *sync_mutex;
+    switch_mutex_t *mutex;
 
     /** @brief Pointer to VoipBit session context */
     voipbit_session_context_t *session_context;
@@ -493,6 +498,50 @@ extern "C"
     switch_bool_t voipbit_adaptive_frame_processor(switch_core_session_t *session,
                                                    switch_media_bug_t *media_processor,
                                                    int direction);
+
+    /**
+     * @brief Default response handler for streaming events
+     *
+     * @param session FreeSWITCH session pointer
+     * @param event_name Name of the event
+     * @param json_payload JSON payload for the event
+     */
+    void default_response_handler(switch_core_session_t *session, const char *event_name, const char *json_payload);
+
+    /**
+     * @brief Media bug callback function
+     *
+     * @param bug Media bug instance
+     * @param user_data User data passed to the callback
+     * @param type Callback type
+     * @return SWITCH_TRUE to continue, SWITCH_FALSE to stop
+     */
+    switch_bool_t media_bug_capture_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type);
+
+    /**
+     * @brief Start OpenAI Realtime API session
+     *
+     * Initializes a new OpenAI Realtime API streaming session with the specified
+     * voice model and configuration parameters.
+     *
+     * @param session FreeSWITCH session pointer
+     * @param stream_id Unique identifier for the stream
+     * @param voice OpenAI voice model (alloy, echo, fable, onyx, nova, shimmer)
+     * @param instructions Optional system instructions for the AI
+     * @param track Audio track type (both, inbound, outbound)
+     * @param sampling_rate Audio sampling rate in Hz (typically 24000)
+     * @param timeout Session timeout in seconds (0 for no timeout)
+     * @param api_key OpenAI API key for authentication
+     * @return SWITCH_STATUS_SUCCESS on success, SWITCH_STATUS_FALSE on failure
+     */
+    switch_status_t do_openai_start(switch_core_session_t *session, 
+                                    char *stream_id, 
+                                    const char *voice, 
+                                    const char *instructions, 
+                                    const char *track, 
+                                    int sampling_rate, 
+                                    int timeout, 
+                                    const char *api_key);
 
 #ifdef __cplusplus
 }

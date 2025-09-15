@@ -111,6 +111,56 @@ uuid_audio_stream <uuid> <stream_id> send_text <json_message>
 uuid_audio_stream ${uuid} my_stream_1 send_text '{"command":"mute","value":true}'
 ```
 
+##### openai_start
+
+Start an OpenAI Realtime API streaming session.
+
+```
+uuid_audio_stream <uuid> <stream_id> openai_start [voice=<voice_model>] [track=<track_type>] [rate=<sampling_rate>] [timeout=<seconds>] [api_key=<key>] [instructions="<system_prompt>"]
+```
+
+**Parameters:**
+- `voice`: OpenAI voice model (default: `alloy`)
+  - `alloy`: Balanced, neutral voice
+  - `echo`: Deeper, more resonant voice
+  - `fable`: British accent, storytelling quality
+  - `onyx`: Deep, professional voice
+  - `nova`: Bright, energetic voice  
+  - `shimmer`: Soft, gentle voice
+- `track`: Audio track selection (default: `both`)
+  - `inbound`: Stream caller audio only
+  - `outbound`: Stream AI audio to caller only
+  - `both`: Bidirectional conversation
+- `rate`: Audio sampling rate in Hz (default: `24000`)
+  - `8000`, `16000`, `24000` (recommended)
+- `timeout`: Session timeout in seconds (default: `0` = no timeout)
+- `api_key`: OpenAI API key (can also be set as environment variable `OPENAI_API_KEY`)
+- `instructions`: System instructions for the AI assistant
+
+**Examples:**
+```bash
+# Basic OpenAI session with default settings
+uuid_audio_stream ${uuid} openai_chat openai_start
+
+# Custom voice and instructions
+uuid_audio_stream ${uuid} openai_support openai_start voice=nova instructions="You are a helpful customer support agent"
+
+# Full configuration
+uuid_audio_stream ${uuid} openai_demo openai_start voice=shimmer track=both rate=24000 timeout=300 instructions="You are a friendly assistant. Keep responses concise."
+
+# With API key (if not set as environment variable)
+uuid_audio_stream ${uuid} openai_session openai_start voice=alloy api_key=sk-your-api-key-here
+```
+
+**OpenAI-Specific Events:**
+
+The OpenAI integration emits additional events:
+
+- `mod_audio_stream::openai_session_started`: OpenAI session initialized
+- `mod_audio_stream::openai_response_generated`: AI generated a response
+- `mod_audio_stream::openai_error`: OpenAI API error occurred
+- `mod_audio_stream::openai_session_expired`: Session expired or rate limited
+
 ## Event Types
 
 The module emits various FreeSWITCH events during operation:

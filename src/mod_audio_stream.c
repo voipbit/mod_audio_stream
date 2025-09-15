@@ -26,7 +26,10 @@
 #include "adaptive_buffer_wrapper.h"
 #include "lws_glue.h"
 #include "mod_audio_stream.h"
+#include "openai_adapter.h"
 #include "switch_types.h"
+
+#define AUDIO_STREAM_LOGGING_PREFIX "mod_audio_stream"
 
 /** @brief VoipBit module operational state management */
 static struct {
@@ -266,10 +269,10 @@ voipbit_intelligent_media_processor(switch_media_bug_t *media_processor,
             switch_frame_t *rframe;
             media_bug_callback_args_t *bug_args;
             private_data_t *tech_pvt;
-            bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-            tech_pvt = (bug_args) ? bug_args->private_data_ptr : NULL;
+            bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(media_processor);
+            tech_pvt = (bug_args) ? bug_args->session_context : NULL;
 
-            rframe = switch_core_media_bug_get_write_replace_frame(bug);
+            rframe = switch_core_media_bug_get_write_replace_frame(media_processor);
             if (tech_pvt)
             {
                 if (tech_pvt->write_buffer)
@@ -306,7 +309,7 @@ voipbit_intelligent_media_processor(switch_media_bug_t *media_processor,
                             }
 
                             stream_ws_send_played_event(tech_pvt, tech_pvt->checkpoints->name);
-                            switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(switch_core_media_bug_get_session(bug)),
+                            switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(switch_core_media_bug_get_session(media_processor)),
                                               SWITCH_LOG_INFO,
                                               "%s mod_audio_stream(%s): (%s) played at(%d) playedCheckpoint(%p).\n",
                                               AUDIO_STREAM_LOGGING_PREFIX,
@@ -337,7 +340,7 @@ voipbit_intelligent_media_processor(switch_media_bug_t *media_processor,
                             free(temp->name);
                             free(temp);
                         }
-                        switch_core_media_bug_set_write_replace_frame(bug, rframe);
+                        switch_core_media_bug_set_write_replace_frame(media_processor, rframe);
                     }
                     switch_mutex_unlock(tech_pvt->write_buffer_mutex);
                 }
@@ -367,8 +370,8 @@ add_media_bug(switch_core_session_t *session, char *stream_id, int type, void *p
 
     args = (media_bug_callback_args_t *)switch_core_session_alloc(session, sizeof(media_bug_callback_args_t));
     switch_mutex_init(&args->mutex, SWITCH_MUTEX_NESTED, switch_core_session_get_pool(session));
-    args->bug_type = type;
-    args->private_data_ptr = pvt_data;
+    args->stream_direction = type;
+    args->session_context = pvt_data;
     status = switch_core_media_bug_add(session, stream_id, NULL, media_bug_capture_callback, args, 0, flag, &bug);
     if (status != SWITCH_STATUS_SUCCESS)
     {
@@ -558,7 +561,7 @@ switch_status_t do_stop(switch_core_session_t *session, char *stream_id, char *t
     }
 
     bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-    tech_pvt = bug_args->private_data_ptr;
+    tech_pvt = bug_args->session_context;
     tech_pvt->end_time = switch_epoch_time_now(NULL);
     tech_pvt->response_handler(session, EVENT_STOP, json_str);
 
@@ -624,13 +627,120 @@ switch_status_t do_graceful_shutdown(switch_core_session_t *session, char *strea
     }
 
     bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-    tech_pvt = bug_args->private_data_ptr;
+    tech_pvt = bug_args->session_context;
     tech_pvt->end_time = switch_epoch_time_now(NULL);
     tech_pvt->response_handler(session, EVENT_STOP, json_str);
     strcpy(tech_pvt->stream_termination_reason, termination_reason);
     switch_log_printf(
         SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "mod_audio_stream(%s): graceful-shutdown\n", stream_id);
     status = stream_session_graceful_shutdown(session, stream_id);
+    return status;
+}
+
+// Basic implementations for missing functions
+void default_response_handler(switch_core_session_t *session, const char *event_name, const char *json_payload)
+{
+    switch_event_t *event;
+    switch_channel_t *channel = switch_core_session_get_channel(session);
+    
+    switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, event_name);
+    switch_channel_event_set_data(channel, event);
+    
+    if (json_payload) {
+        switch_event_add_body(event, "%s", json_payload);
+    }
+    
+    switch_event_fire(&event);
+    
+    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG,
+                     "mod_audio_stream: Event fired: %s\n", event_name);
+}
+
+switch_bool_t media_bug_capture_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
+{
+    return voipbit_intelligent_media_processor(bug, user_data, type);
+}
+
+switch_status_t do_openai_start(switch_core_session_t *session, 
+                                char *stream_id,
+                                const char *voice,
+                                const char *instructions,
+                                const char *track,
+                                int sampling_rate,
+                                int timeout,
+                                const char *api_key) 
+{
+    // Get OpenAI WebSocket URL
+    char *openai_url = openai_get_websocket_url();
+    if (!openai_url) {
+        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+                         "mod_audio_stream(%s): Failed to get OpenAI WebSocket URL\n", stream_id);
+        return SWITCH_STATUS_FALSE;
+    }
+    
+    // Parse URL components
+    char host[MAX_WEBSOCKET_URL_LENGTH];
+    char path[MAX_WEBSOCKET_PATH_LENGTH];
+    unsigned int port;
+    int sslFlags;
+    
+    switch_channel_t *channel = switch_core_session_get_channel(session);
+    
+    if (!parse_ws_uri(channel, openai_url, &host[0], &path[0], &port, &sslFlags)) {
+        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+                         "mod_audio_stream(%s): Failed to parse OpenAI WebSocket URL: %s\n", 
+                         stream_id, openai_url);
+        free(openai_url);
+        return SWITCH_STATUS_FALSE;
+    }
+    
+    // Set OpenAI API key as channel variable for authentication
+    if (api_key) {
+        switch_channel_set_variable(channel, "OPENAI_API_KEY", api_key);
+    }
+    
+    // Set OpenAI mode flag
+    switch_channel_set_variable(channel, "OPENAI_REALTIME_MODE", "true");
+    
+    // Create OpenAI configuration
+    openai_config_t *config = openai_create_default_config(voice, instructions);
+    if (!config) {
+        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+                         "mod_audio_stream(%s): Failed to create OpenAI config\n", stream_id);
+        free(openai_url);
+        return SWITCH_STATUS_FALSE;
+    }
+    
+    // Generate initial session configuration as metadata
+    char *session_config = openai_generate_session_update(config);
+    
+    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO,
+                     "mod_audio_stream(%s): Starting OpenAI Realtime session with voice=%s\n",
+                     stream_id, voice ? voice : "alloy");
+    
+    // Start capture with OpenAI-specific settings
+    switch_status_t status = start_capture(session,
+                                          stream_id,
+                                          openai_url,
+                                          host,
+                                          port,
+                                          path,
+                                          "L16",  // Use L16 codec
+                                          sampling_rate,
+                                          sslFlags,
+                                          (char*)track,
+                                          timeout,
+                                          1,  // Always bidirectional for OpenAI
+                                          session_config,  // Pass session config as metadata
+                                          "mod_audio_stream");
+    
+    // Cleanup
+    if (session_config) {
+        free(session_config);
+    }
+    openai_free_config(config);
+    free(openai_url);
+    
     return status;
 }
 
@@ -658,8 +768,9 @@ static switch_status_t send_text(switch_core_session_t *session, char *stream_id
 }
 
 #define STREAM_API_SYNTAX                                                                                              \
-    "<uuid> <streamid> [start | stop | send_text | pause | resume | graceful-shutdown ] [wss-url | path] [inbound | "  \
-    "outbound | both] [l16 | mulaw] [8000 | 16000 | 24000 | 32000 | 64000] [timeout] [is_bidirectional] [metadata]"
+    "<uuid> <streamid> [start | stop | send_text | pause | resume | graceful-shutdown | openai_start ] [wss-url | path] [inbound | "  \
+    "outbound | both] [l16 | mulaw] [8000 | 16000 | 24000 | 32000 | 64000] [timeout] [is_bidirectional] [metadata]\n" \
+    "OpenAI Realtime: <uuid> <streamid> openai_start [voice=alloy] [track=both] [rate=24000] [timeout=0] [api_key=xxx] [instructions=\"...]\""
 SWITCH_STANDARD_API(stream_function)
 {
     char *mycmd = NULL, *argv[10] = {0};
@@ -717,6 +828,41 @@ SWITCH_STANDARD_API(stream_function)
                     goto done;
                 }
                 status = send_text(lsession, argv[1], argv[3]);
+            }
+            else if (!strcasecmp(argv[2], "openai_start"))
+            {
+                // OpenAI Realtime API start command
+                // Syntax: <uuid> <stream_id> openai_start [voice=alloy] [track=both] [rate=24000] [timeout=0] [api_key=xxx] [instructions="..."]
+                const char *voice = "alloy";
+                const char *instructions = NULL;
+                const char *track = "both"; 
+                int sampling_rate = 24000;
+                int timeout = 0;
+                const char *api_key = NULL;
+                
+                // Parse additional parameters from command arguments
+                for (int i = 3; i < argc; i++) {
+                    if (strncmp(argv[i], "voice=", 6) == 0) {
+                        voice = argv[i] + 6;
+                    } else if (strncmp(argv[i], "instructions=", 13) == 0) {
+                        instructions = argv[i] + 13;
+                    } else if (strncmp(argv[i], "track=", 6) == 0) {
+                        track = argv[i] + 6;
+                    } else if (strncmp(argv[i], "rate=", 5) == 0) {
+                        sampling_rate = atoi(argv[i] + 5);
+                    } else if (strncmp(argv[i], "timeout=", 8) == 0) {
+                        timeout = atoi(argv[i] + 8);
+                    } else if (strncmp(argv[i], "api_key=", 8) == 0) {
+                        api_key = argv[i] + 8;
+                    }
+                }
+                
+                switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, 
+                                  "mod_audio_stream: Starting OpenAI session for %s with voice=%s\n", 
+                                  argv[1], voice);
+                
+                status = do_openai_start(lsession, argv[1], voice, instructions, track, 
+                                         sampling_rate, timeout, api_key);
             }
             else if (!strcasecmp(argv[2], "start"))
             {
@@ -916,6 +1062,13 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_audio_stream_load)
     switch_console_set_complete("add uuid_audio_stream start wss-url metadata");
     switch_console_set_complete("add uuid_audio_stream start wss-url");
     switch_console_set_complete("add uuid_audio_stream stop");
+    switch_console_set_complete("add uuid_audio_stream openai_start");
+    switch_console_set_complete("add uuid_audio_stream openai_start voice=alloy");
+    switch_console_set_complete("add uuid_audio_stream openai_start voice=echo");
+    switch_console_set_complete("add uuid_audio_stream openai_start voice=fable");
+    switch_console_set_complete("add uuid_audio_stream openai_start voice=onyx");
+    switch_console_set_complete("add uuid_audio_stream openai_start voice=nova");
+    switch_console_set_complete("add uuid_audio_stream openai_start voice=shimmer");
     switch_log_printf(
         SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_audio_stream: API interface registered successfully\n");
 

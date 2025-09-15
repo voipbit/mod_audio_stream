@@ -210,10 +210,13 @@ RUN mkdir -p build && \
     cp mod_audio_stream.so /opt/freeswitch/lib/freeswitch/mod/
 
 # Copy corrected FreeSWITCH configuration with ACLs
-COPY config/freeswitch.xml /opt/freeswitch/etc/freeswitch/
+COPY docker/config/freeswitch.xml /opt/freeswitch/etc/freeswitch/
 
-# Copy mod_audio_stream configuration
-COPY conf/audio_stream.conf.xml.sample /opt/freeswitch/etc/freeswitch/autoload_configs/audio_stream.conf.xml
+# Copy mod_audio_stream configuration (create basic one since sample doesn't exist)
+RUN echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' > /opt/freeswitch/etc/freeswitch/autoload_configs/audio_stream.conf.xml && \
+    echo '<configuration name="audio_stream.conf" description="Audio Stream Configuration">' >> /opt/freeswitch/etc/freeswitch/autoload_configs/audio_stream.conf.xml && \
+    echo '  <settings></settings>' >> /opt/freeswitch/etc/freeswitch/autoload_configs/audio_stream.conf.xml && \
+    echo '</configuration>' >> /opt/freeswitch/etc/freeswitch/autoload_configs/audio_stream.conf.xml
 
 # Install Python websockets package and copy test server
 RUN pip3 install websockets

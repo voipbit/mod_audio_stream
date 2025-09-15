@@ -5,6 +5,7 @@
  */
 #include "connection_manager.hpp"
 #include <iostream>
+#include <algorithm>
 
 // Basic stub implementation - provides minimal functionality for compilation
 ConnectionManager::ConnectionManager() : monitoring_active_(false) {}

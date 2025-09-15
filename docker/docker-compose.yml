@@ -58,6 +58,12 @@ services:
       - AUDIO_STREAM_CHANNELS=${AUDIO_STREAM_CHANNELS:-1}
       - AUDIO_STREAM_BUFFER_SIZE=${AUDIO_STREAM_BUFFER_SIZE:-320}
       
+      # OpenAI configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_DEFAULT_VOICE=${OPENAI_DEFAULT_VOICE:-alloy}
+      - OPENAI_DEFAULT_INSTRUCTIONS=${OPENAI_DEFAULT_INSTRUCTIONS:-You are a helpful voice assistant}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
+      
       # Database configuration (if using external DB)
       - DB_HOST=${DB_HOST:-postgres}
       - DB_PORT=${DB_PORT:-5432}
@@ -91,10 +97,10 @@ services:
       retries: 3
       start_period: 60s
 
-    # Dependencies
-    depends_on:
-      - redis
-      - postgres
+    # Dependencies (commented out for testing)
+    # depends_on:
+    #   - redis
+    #   - postgres
 
     # Network configuration
     networks:

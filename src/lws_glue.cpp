@@ -594,7 +594,7 @@ eventCallback(const char *session_id, const char *stream_id, AudioPipe::NotifyEv
         if (bug)
         {
             media_bug_callback_args_t *bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-            private_data_t *tech_pvt = (bug_args) ? bug_args->private_data_ptr : NULL;
+            private_data_t *tech_pvt = (bug_args) ? bug_args->session_context : NULL;
             if (tech_pvt)
             {
                 switch (event)
@@ -1228,7 +1228,7 @@ extern "C"
             return SWITCH_STATUS_FALSE;
         }
         media_bug_callback_args_t *bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-        private_data_t *tech_pvt = (bug_args) ? bug_args->private_data_ptr : NULL;
+        private_data_t *tech_pvt = (bug_args) ? bug_args->session_context : NULL;
 
         if (!tech_pvt)
         {
@@ -1298,7 +1298,7 @@ extern "C"
         }
 
         destroy_tech_pvt(tech_pvt);
-        bug_args->private_data_ptr = NULL;
+        bug_args->session_context = NULL;
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session),
                           SWITCH_LOG_INFO,
                           "mod_audio_stream(%s) stream_session_cleanup: connection closed\n",
@@ -1321,7 +1321,7 @@ extern "C"
         }
 
         media_bug_callback_args_t *bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-        private_data_t *tech_pvt = (bug_args) ? bug_args->private_data_ptr : NULL;
+        private_data_t *tech_pvt = (bug_args) ? bug_args->session_context : NULL;
 
         if (!tech_pvt)
             return SWITCH_STATUS_FALSE;
@@ -1344,7 +1344,7 @@ extern "C"
             return SWITCH_STATUS_FALSE;
         }
         media_bug_callback_args_t *bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-        private_data_t *tech_pvt = (bug_args) ? bug_args->private_data_ptr : NULL;
+        private_data_t *tech_pvt = (bug_args) ? bug_args->session_context : NULL;
 
         if (!tech_pvt)
             return SWITCH_STATUS_FALSE;
@@ -1366,7 +1366,7 @@ extern "C"
             return SWITCH_STATUS_FALSE;
         }
         media_bug_callback_args_t *bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-        private_data_t *tech_pvt = (bug_args) ? bug_args->private_data_ptr : NULL;
+        private_data_t *tech_pvt = (bug_args) ? bug_args->session_context : NULL;
 
         if (!tech_pvt)
             return SWITCH_STATUS_FALSE;
@@ -1403,7 +1403,7 @@ extern "C"
     switch_bool_t stream_frame(switch_core_session_t *session, switch_media_bug_t *bug)
     {
         media_bug_callback_args_t *bug_args = (media_bug_callback_args_t *)switch_core_media_bug_get_user_data(bug);
-        private_data_t *tech_pvt = (bug_args) ? bug_args->private_data_ptr : NULL;
+        private_data_t *tech_pvt = (bug_args) ? bug_args->session_context : NULL;
         int type;
         Buffer *audioBuffer;
         SpeexResamplerState *resampler = NULL;
@@ -1427,7 +1427,7 @@ extern "C"
 
             if (audio_pipe_ptr->needsBothTracks())
             {
-                if (bug_args->bug_type == MEDIA_BUG_INBOUND)
+                if (bug_args->stream_direction == MEDIA_BUG_INBOUND)
                 {
                     type = 0;
                     audioBuffer = audio_pipe_ptr->m_audio_buffer;
@@ -1442,7 +1442,7 @@ extern "C"
             }
             else
             {
-                type = (bug_args->bug_type == MEDIA_BUG_INBOUND) ? 0 : 1;
+                type = (bug_args->stream_direction == MEDIA_BUG_INBOUND) ? 0 : 1;
                 audioBuffer = audio_pipe_ptr->m_audio_buffer;
                 resampler = tech_pvt->resampler;
             }

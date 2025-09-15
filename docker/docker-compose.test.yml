@@ -1,0 +1,101 @@
+# =============================================================================
+# mod_audio_stream - Simplified Docker Compose for Testing
+# =============================================================================
+#
+# This simplified docker-compose file is for building and testing 
+# mod_audio_stream with OpenAI integration only. It excludes optional 
+# services like Redis and PostgreSQL.
+#
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # FreeSWITCH with mod_audio_stream (Testing Only)
+  # ---------------------------------------------------------------------------
+  freeswitch:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        BUILD_DATE: "${BUILD_DATE:-}"
+        VCS_REF: "${VCS_REF:-}"
+        VERSION: "${VERSION:-1.0.0-test}"
+        FREESWITCH_VERSION: "${FREESWITCH_VERSION:-1.10.11}"
+    container_name: mod_audio_stream_test
+    hostname: freeswitch-test
+    restart: "no"  # Don't restart for testing
+    
+    # Port mappings (reduced set for testing)
+    ports:
+      # SIP signaling
+      - "${SIP_UDP_PORT:-5060}:5060/udp"
+      - "${SIP_TCP_PORT:-5060}:5060/tcp"
+      # Event Socket Layer (ESL)
+      - "${ESL_PORT:-8021}:8021/tcp"
+      # HTTP/WebSocket (for audio streaming)
+      - "${HTTP_PORT:-8080}:8080/tcp"
+      # RTP media (reduced range for testing)
+      - "${RTP_PORT_START:-16384}-${RTP_PORT_END:-16394}:16384-16394/udp"
+
+    # Environment variables
+    environment:
+      # FreeSWITCH configuration
+      - FS_LOG_LEVEL=${FS_LOG_LEVEL:-debug}
+      - FS_COLORIZE_CONSOLE=${FS_COLORIZE_CONSOLE:-true}
+      
+      # mod_audio_stream configuration
+      - AUDIO_STREAM_WS_PORT=${AUDIO_STREAM_WS_PORT:-8080}
+      - AUDIO_STREAM_SAMPLE_RATE=${AUDIO_STREAM_SAMPLE_RATE:-24000}
+      - AUDIO_STREAM_CHANNELS=${AUDIO_STREAM_CHANNELS:-1}
+      - AUDIO_STREAM_BUFFER_SIZE=${AUDIO_STREAM_BUFFER_SIZE:-320}
+      
+      # OpenAI configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-test-key}
+      - OPENAI_DEFAULT_VOICE=${OPENAI_DEFAULT_VOICE:-alloy}
+      - OPENAI_DEFAULT_INSTRUCTIONS=${OPENAI_DEFAULT_INSTRUCTIONS:-You are a helpful voice assistant}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
+      
+      # Testing configuration
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-true}
+      - VERBOSE=${VERBOSE:-true}
+
+    # Volume mounts (minimal for testing)
+    volumes:
+      # Configuration files
+      - ./config:/opt/freeswitch/etc/freeswitch:ro
+      # Logs (for debugging)
+      - ./logs:/var/log/freeswitch
+      # Test recordings (optional)
+      - ./test-recordings:/var/lib/freeswitch/recordings
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "freeswitch", "-version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Network configuration
+    networks:
+      - test_network
+
+    # Resource limits (lighter for testing)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+# =============================================================================
+# Network Configuration
+# =============================================================================
+networks:
+  test_network:
+    name: mod_audio_stream_test_network
+    driver: bridge

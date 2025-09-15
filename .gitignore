@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: MIT
+
+# ============================================================================
+# mod_audio_stream - Git Ignore Rules
+# ============================================================================
+#
+# This file defines patterns for files and directories that should not be
+# tracked by Git version control. Includes build artifacts, temporary files,
+# editor configurations, and OS-specific files.
+#
+
+# ============================================================================
+# Build System Artifacts
+# ============================================================================
+
+# CMake build directories (any name starting with 'build')
+/build/
+/build*/
+/Build*/
+/BUILD*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled module files
+*.so
+*.so.*
+*.dylib
+*.dll
+*.a
+*.la
+*.lai
+*.lo
+*.o
+*.obj
+
+# Installation manifest
+install_manifest.txt
+
+# ============================================================================
+# Development Tools and Editors
+# ============================================================================
+
+# macOS Finder metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# JetBrains IDEs (IntelliJ, CLion, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Vim editor files
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+
+# Emacs editor files
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================================
+# Documentation and Logs
+# ============================================================================
+
+# Generated documentation
+/doc/html/
+/doc/latex/
+/doc/man/
+*.tag
+
+# Log files
+*.log
+*.out
+*.err
+
+# ============================================================================
+# Temporary and Backup Files
+# ============================================================================
+
+# Backup files created by refactoring scripts
+/backup_*/
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# ============================================================================
+# FreeSWITCH Specific
+# ============================================================================
+
+# FreeSWITCH log files that might be created during testing
+freeswitch.log
+freeswitch.log.*
+
+# Test audio files
+*.wav
+*.mp3
+*.flac
+*.aiff

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration name="audio_stream.conf" description="Advanced Audio Stream Configuration">
+  
+  <!-- Global Settings -->
+  <settings>
+    <param name="log-level" value="INFO"/>
+    <param name="enable-metrics" value="true"/>
+    <param name="metrics-interval" value="30"/>
+    <param name="thread-pool-size" value="10"/>
+  </settings>
+
+  <!-- Connection Profiles -->
+  <profiles>
+    <profile name="transcription">
+      <settings>
+        <param name="codec" value="l16"/>
+        <param name="sample-rate" value="16000"/>
+        <param name="buffer-size" value="320"/>
+        <param name="max-retry-attempts" value="3"/>
+        <param name="retry-delay-ms" value="1000"/>
+        <param name="connection-timeout" value="10000"/>
+        <param name="enable-noise-reduction" value="true"/>
+        <param name="enable-echo-cancellation" value="false"/>
+      </settings>
+      <servers>
+        <server name="primary" url="wss://transcription.example.com/stream" priority="1"/>
+        <server name="backup" url="wss://backup-transcription.example.com/stream" priority="2"/>
+      </servers>
+      <authentication>
+        <param name="type" value="jwt"/>
+        <param name="token-header" value="Authorization"/>
+        <param name="token-refresh-threshold" value="300"/>
+      </authentication>
+    </profile>
+
+    <profile name="recording">
+      <settings>
+        <param name="codec" value="opus"/>
+        <param name="sample-rate" value="48000"/>
+        <param name="buffer-size" value="960"/>
+        <param name="enable-compression" value="true"/>
+        <param name="quality-level" value="high"/>
+      </settings>
+      <servers>
+        <server name="primary" url="wss://recording.example.com/stream" priority="1"/>
+      </servers>
+    </profile>
+
+    <profile name="realtime">
+      <settings>
+        <param name="codec" value="l16"/>
+        <param name="sample-rate" value="8000"/>
+        <param name="buffer-size" value="160"/>
+        <param name="low-latency-mode" value="true"/>
+        <param name="adaptive-buffering" value="true"/>
+        <param name="enable-jitter-buffer" value="true"/>
+      </settings>
+    </profile>
+  </profiles>
+
+  <!-- Security Settings -->
+  <security>
+    <param name="verify-ssl-certs" value="true"/>
+    <param name="ssl-ca-file" value="/etc/ssl/certs/ca-certificates.crt"/>
+    <param name="rate-limit-requests-per-second" value="100"/>
+    <param name="max-concurrent-streams" value="50"/>
+    <param name="allowed-origins" value="*.example.com,*.trusted-domain.com"/>
+  </security>
+
+  <!-- Audio Processing -->
+  <audio-processing>
+    <param name="enable-vad" value="true"/>
+    <param name="vad-sensitivity" value="medium"/>
+    <param name="enable-agc" value="true"/>
+    <param name="agc-target-level" value="-20"/>
+    <param name="enable-noise-gate" value="true"/>
+    <param name="noise-gate-threshold" value="-40"/>
+  </audio-processing>
+
+  <!-- Monitoring -->
+  <monitoring>
+    <param name="enable-prometheus" value="true"/>
+    <param name="prometheus-port" value="9090"/>
+    <param name="health-check-endpoint" value="/health"/>
+    <param name="enable-detailed-logging" value="false"/>
+  </monitoring>
+
+</configuration>

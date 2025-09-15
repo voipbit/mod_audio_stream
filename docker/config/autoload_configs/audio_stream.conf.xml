@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: MIT
+<configuration name="audio_stream.conf" description="Audio stream module">
+  <settings>
+    <!-- No settings required by default -->
+  </settings>
+</configuration>

@@ -1,0 +1,232 @@
+# =============================================================================
+# mod_audio_stream - Docker Compose Configuration
+# =============================================================================
+#
+# This docker-compose file provides different configurations for development,
+# testing, and production deployment of mod_audio_stream with FreeSWITCH.
+#
+# Services:
+# - freeswitch: Main FreeSWITCH server with mod_audio_stream
+# - redis: (Optional) Redis for session storage
+# - postgres: (Optional) PostgreSQL for call data records
+#
+
+version: '3.8'
+
+# =============================================================================
+# Services Configuration
+# =============================================================================
+services:
+  # ---------------------------------------------------------------------------
+  # FreeSWITCH with mod_audio_stream
+  # ---------------------------------------------------------------------------
+  freeswitch:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        BUILD_DATE: "${BUILD_DATE:-}"
+        VCS_REF: "${VCS_REF:-}"
+        VERSION: "${VERSION:-1.0.0}"
+        FREESWITCH_VERSION: "${FREESWITCH_VERSION:-1.10.11}"
+    container_name: mod_audio_stream_freeswitch
+    hostname: freeswitch
+    restart: unless-stopped
+    
+    # Port mappings
+    ports:
+      # SIP signaling
+      - "${SIP_UDP_PORT:-5060}:5060/udp"
+      - "${SIP_TCP_PORT:-5060}:5060/tcp"
+      - "${SIP_TLS_PORT:-5080}:5080/tcp"
+      # Event Socket Layer (ESL)
+      - "${ESL_PORT:-8021}:8021/tcp"
+      # HTTP/WebSocket (for audio streaming)
+      - "${HTTP_PORT:-8080}:8080/tcp"
+      # RTP media (dynamic range)
+      - "${RTP_PORT_START:-16384}-${RTP_PORT_END:-16404}:16384-16404/udp"
+
+    # Environment variables
+    environment:
+      # FreeSWITCH configuration
+      - FS_LOG_LEVEL=${FS_LOG_LEVEL:-info}
+      - FS_COLORIZE_CONSOLE=${FS_COLORIZE_CONSOLE:-true}
+      
+      # mod_audio_stream configuration
+      - AUDIO_STREAM_WS_PORT=${AUDIO_STREAM_WS_PORT:-8080}
+      - AUDIO_STREAM_SAMPLE_RATE=${AUDIO_STREAM_SAMPLE_RATE:-8000}
+      - AUDIO_STREAM_CHANNELS=${AUDIO_STREAM_CHANNELS:-1}
+      - AUDIO_STREAM_BUFFER_SIZE=${AUDIO_STREAM_BUFFER_SIZE:-320}
+      
+      # Database configuration (if using external DB)
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-freeswitch}
+      - DB_USER=${DB_USER:-freeswitch}
+      - DB_PASSWORD=${DB_PASSWORD:-freeswitch}
+      
+      # Redis configuration (if using Redis for sessions)
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+    # Volume mounts
+    volumes:
+      # Configuration files
+      - ./config:/opt/freeswitch/etc/freeswitch:ro
+      # Logs (persistent)
+      - freeswitch_logs:/var/log/freeswitch
+      # Database files (if using SQLite)
+      - freeswitch_data:/var/lib/freeswitch
+      # Recordings (persistent)
+      - freeswitch_recordings:/var/lib/freeswitch/recordings
+      # Custom sounds (optional)
+      - ./sounds:/opt/freeswitch/share/freeswitch/sounds/custom:ro
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "freeswitch", "-version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Dependencies
+    depends_on:
+      - redis
+      - postgres
+
+    # Network configuration
+    networks:
+      - audio_stream_network
+
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Redis for session storage (optional)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mod_audio_stream_redis
+    hostname: redis
+    restart: unless-stopped
+    
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    
+    volumes:
+      - redis_data:/data
+    
+    networks:
+      - audio_stream_network
+    
+    # Redis configuration
+    command: >
+      --requirepass ${REDIS_PASSWORD:-}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL for call data records (optional)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: mod_audio_stream_postgres
+    hostname: postgres
+    restart: unless-stopped
+    
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    
+    environment:
+      - POSTGRES_DB=${DB_NAME:-freeswitch}
+      - POSTGRES_USER=${DB_USER:-freeswitch}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-freeswitch}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --locale=C
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    
+    networks:
+      - audio_stream_network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-freeswitch}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Nginx reverse proxy (optional, for production)
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: mod_audio_stream_nginx
+    hostname: nginx
+    restart: unless-stopped
+    
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    
+    depends_on:
+      - freeswitch
+    
+    networks:
+      - audio_stream_network
+    
+    profiles:
+      - production
+
+# =============================================================================
+# Network Configuration
+# =============================================================================
+networks:
+  audio_stream_network:
+    name: mod_audio_stream_network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# =============================================================================
+# Volume Configuration
+# =============================================================================
+volumes:
+  # FreeSWITCH data
+  freeswitch_logs:
+    name: mod_audio_stream_logs
+  freeswitch_data:
+    name: mod_audio_stream_data
+  freeswitch_recordings:
+    name: mod_audio_stream_recordings
+  
+  # Database data
+  redis_data:
+    name: mod_audio_stream_redis_data
+  postgres_data:
+    name: mod_audio_stream_postgres_data
+  
+  # Nginx cache
+  nginx_cache:
+    name: mod_audio_stream_nginx_cache
